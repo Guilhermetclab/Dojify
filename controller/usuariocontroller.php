@@ -51,7 +51,6 @@ class UsuarioController {
                 exit;
         }
     }
-
     // ==========================================
     // MÉTODOS EXECUTADOS PELO GERENTE (Perfil 2)
     // ==========================================

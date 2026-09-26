@@ -37,9 +37,9 @@ class FinanceiroController {
         $formaPagamento = trim($_POST['forma_pagamento'] ?? 'DINHEIRO');
 
         if ($idPagamento && $this->dao->registarRecebimento($idPagamento, $formaPagamento)) {
-            header('Location: ../view/gerente/pagamentos.php?sucesso=recebimento_registado');
+            header('Location: ../view/gerente/listar_pagamentos.php?sucesso=recebimento_registado');
         } else {
-            header('Location: ../view/gerente/pagamentos.php?erro=falha_recebimento');
+            header('Location: ../view/gerente/listar_pagamentos.php?erro=falha_recebimento');
         }
         exit;
     }

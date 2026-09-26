@@ -7,10 +7,10 @@ class ModalidadeDAO {
     private PDO $conexao;
 
     public function __construct() {
-        $this->conexao = Conexao::getConexao();
+        $this->conexao = \Conexao::getConexao();
     }
 
-    public function cadastrar(ModalidadeDTO $modalidade): bool {
+    public function cadastrar(\ModalidadeDTO $modalidade): bool {
         try {
             $sql = "INSERT INTO modalidade (id_academia, nome, descricao) 
                     VALUES (:id_academia, :nome, :descricao)";

@@ -59,7 +59,7 @@ if (isset($_GET['filtrar'])) {
         
         <div class="no-print" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
             <h2 style="margin: 0;">Emissão de Relatório Financeiro</h2>
-            <a href="pagamentos.php" class="btn" style="background-color: var(--border-color); color: var(--text-primary) !important;">⬅ Voltar</a>
+            <a href="listar_pagamentos.php" class="btn" style="background-color: var(--border-color); color: var(--text-primary) !important;">⬅ Voltar</a>
         </div>
 
         <!-- Formulário de Filtros (Não aparece na impressão) -->

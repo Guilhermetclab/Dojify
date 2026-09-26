@@ -1,4 +1,3 @@
-<!-- view/gerente/cadastrar_aluno.php -->
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
@@ -10,14 +9,6 @@
     <?php include '../includes/header.php'; ?>
 
     <div class="container">
-
-        <!-- Alerta de erro nativo do seu estilo.css -->
-        <?php if (isset($_GET['erro'])): ?>
-            <div class="alert-erro">
-                ⚠️ Não foi possível concluir o registo. Verifique os campos preenchidos ou se o CPF/E-mail já se encontram registados.
-            </div>
-        <?php endif; ?>
-
         <form action="../../controller/UsuarioController.php?acao=cadastrar_aluno" method="POST">
             <div class="text-center" style="margin-bottom: 20px;">
                 <img src="../../assets/img/dojify_logo1.png" alt="Dojify Logo" style="width: 100px; height: auto; margin-bottom: 12px; filter: grayscale(100%);">
@@ -103,5 +94,6 @@
     </div>
 
     <?php include '../includes/footer.php'; ?>
+
 </body>
 </html>

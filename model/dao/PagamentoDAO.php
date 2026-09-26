@@ -1,5 +1,4 @@
 <?php
-// model/dao/PagamentoDAO.php
 
 require_once __DIR__ . '/Conexao.php';
 require_once __DIR__ . '/../dto/PagamentoDTO.php';
@@ -100,23 +99,33 @@ class PagamentoDAO {
                 FROM pagamento p
                 INNER JOIN plano pl ON p.id_plano_matricula = pl.id_plano
                 INNER JOIN usuario u ON pl.id_usuario_aluno = u.id_usuario
-                WHERE u.id_academia = :id_academia
-                  AND p.data_vencimento BETWEEN :data_inicio AND :data_fim";
+                WHERE u.id_academia = :id_academia";
         
-        // Se o gerente não escolheu "TODOS", adiciona o filtro de estado
+        // 1. FILTRO DE DATAS ABRANGENTE: 
+        // Apanha o registo se ele VENCEU neste mês OU se foi PAGO neste mês
+        $sql .= " AND (
+                    (DATE(p.data_vencimento) >= :data_inicio AND DATE(p.data_vencimento) <= :data_fim)
+                    OR 
+                    (DATE(p.data_pagamento) >= :data_inicio AND DATE(p.data_pagamento) <= :data_fim)
+                  )";
+        
+        // 2. FILTRO DE ESTADO (TODOS JUNTOS OU SEPARADOS):
+        // Se não for 'TODOS', adiciona o filtro específico (PAGO, PENDENTE ou ATRASADO)
         if ($status !== 'TODOS') {
-            $sql .= " AND p.status = :status";
+            $sql .= " AND UPPER(p.status) = :status";
         }
         
         $sql .= " ORDER BY p.data_vencimento ASC";
         
         $stmt = $this->conexao->prepare($sql);
+        
+        // Atribuição de valores
         $stmt->bindValue(':id_academia', $idAcademia, PDO::PARAM_INT);
         $stmt->bindValue(':data_inicio', $dataInicio);
         $stmt->bindValue(':data_fim', $dataFim);
         
         if ($status !== 'TODOS') {
-            $stmt->bindValue(':status', $status);
+            $stmt->bindValue(':status', strtoupper($status));
         }
         
         $stmt->execute();

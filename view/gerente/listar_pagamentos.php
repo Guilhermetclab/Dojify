@@ -43,12 +43,31 @@ $pagamentos = $dao->listarPagamentosDaAcademia($idAcademia);
         
         <p class="text-center text-muted" style="margin-bottom: 24px;">Controlo das mensalidades dos alunos.</p>
 
-        <?php if (isset($_GET['sucesso'])): ?>
-            <div class="alert-sucesso">Recebimento registado com sucesso!</div>
-        <?php endif; ?>
+        <?php
+        $toastTipo = null;
+        $toastTexto = '';
+        if (isset($_GET['sucesso'])) {
+            $toastTipo = 'sucesso';
+            $toastTexto = 'Recebimento registado com sucesso!';
+        } elseif (isset($_GET['erro'])) {
+            $toastTipo = 'erro';
+            $toastTexto = 'Não foi possível registar o recebimento. Tente novamente.';
+        }
+        ?>
 
-        <?php if (isset($_GET['erro'])): ?>
-            <div class="alert-erro">Não foi possível registar o recebimento. Tente novamente.</div>
+        <?php if ($toastTipo): ?>
+            <div id="toast" class="toast toast--<?= $toastTipo ?>"><?= htmlspecialchars($toastTexto) ?></div>
+            <script>
+                document.addEventListener('DOMContentLoaded', function () {
+                    const toast = document.getElementById('toast');
+                    if (!toast) return;
+                    requestAnimationFrame(() => toast.classList.add('toast-show'));
+                    setTimeout(() => {
+                        toast.classList.remove('toast-show');
+                        setTimeout(() => toast.remove(), 300);
+                    }, 4000);
+                });
+            </script>
         <?php endif; ?>
 
         <?php if (empty($pagamentos)): ?>

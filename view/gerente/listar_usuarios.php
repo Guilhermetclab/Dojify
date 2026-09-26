@@ -43,24 +43,8 @@ foreach ($usuarios as $u) {
     <title>Gerir Alunos e Professores - Dojify</title>
     <link rel="stylesheet" href="../../assets/css/estilo.css">
 </head>
-<body>
-    <header class="navbar">
-        <div class="navbar-brand">
-            <a href="home_gerente.php" class="logo-link">
-                <img src="../../assets/img/Dojify_original2.png" alt="Dojify Logo" class="navbar-logo">
-                <div>
-                    <h1>Dojify</h1>
-                </div>
-            </a>
-        </div>
-        
-        <div class="navbar-user">
-            <span class="user-greeting">Olá, <strong><?= htmlspecialchars($_SESSION['usuario']['nome']) ?></strong></span>
-            <a href="home_gerente.php" class="btn btn-sm">Início</a>
-            <a href="../../controller/UsuarioController.php?acao=logout" class="btn btn-sm btn-danger">Sair</a>
-        </div>
-    </header>
-
+<body>    
+    <?php include '../includes/header.php'; ?> 
     <div class="container">
         <h2>Gestão de Utilizadores</h2>
         <p class="text-center text-muted" style="margin-bottom: 24px;">Administração de professores e alunos registados na sua academia.</p>
@@ -72,10 +56,6 @@ foreach ($usuarios as $u) {
             </div>
         </div>
 
-        <!-- Mensagem de Sucesso -->
-        <?php if (isset($_GET['sucesso'])): ?>
-            <div class="alert-sucesso">Operação realizada com sucesso!</div>
-        <?php endif; ?>
 
         <!-- SECÇÃO DE GERENTES -->
         <h3 style="margin: 24px 0 12px 0;">Gerente</h3>

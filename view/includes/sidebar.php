@@ -20,7 +20,7 @@
             </a>
         </li>
         <li>
-            <a href="../gerente/pagamentos.php" class="btn" style="width: 100%; justify-content: flex-start; background-color: transparent; color: var(--text-primary) !important; border: 1px solid var(--border-color);">
+            <a href="../gerente/listar_pagamentos.php" class="btn" style="width: 100%; justify-content: flex-start; background-color: transparent; color: var(--text-primary) !important; border: 1px solid var(--border-color);">
                 💰 Financeiro
             </a>
         </li>
