@@ -1,7 +1,9 @@
 // ==========================================
 // NOTIFICAÇÕES (MENU DROPDOWN DO HEADER)
 // ==========================================
-
+// ==========================================
+// NOTIFICAÇÕES (MENU DROPDOWN DO HEADER)
+// ==========================================
 document.addEventListener('DOMContentLoaded', function () {
     const btnNotificacao = document.getElementById('btnNotificacao');
     const dropdownNotificacoes = document.getElementById('dropdownNotificacoes');
@@ -12,7 +14,7 @@ document.addEventListener('DOMContentLoaded', function () {
             dropdownNotificacoes.classList.toggle('show');
         });
 
-        // Clica fora do menu para fechar
+        // Fecha o dropdown se clicar fora dele
         document.addEventListener('click', function (e) {
             if (!dropdownNotificacoes.contains(e.target) && e.target !== btnNotificacao) {
                 dropdownNotificacoes.classList.remove('show');
@@ -20,7 +22,6 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 });
-
 
 // ==========================================
 // MENSAGEM DE SUCESSO OU ERRO

@@ -555,17 +555,18 @@ input[type="time"]:focus {
     right: 0;
     top: 45px;
     width: 320px;
-    background: var(--bg-card);
-    border: 1px solid var(--border-color);
+    background: var(--bg-card, #fff);
+    border: 1px solid var(--border-color, #ccc);
     border-radius: 8px;
-    box-shadow: var(--shadow-md);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     z-index: 2000;
     padding: 0;
     overflow: hidden;
 }
 
+/* Estado aberto (ativado via JavaScript) */
 .notificacao-dropdown.show {
-    display: block;
+    display: block !important;
 }
 
 .notificacao-dropdown-header {

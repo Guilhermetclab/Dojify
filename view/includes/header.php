@@ -94,23 +94,3 @@ if (isset($_SESSION['usuario']) && (int)$_SESSION['usuario']['perfil_id'] === 2 
 <!-- SCRIPT PARA ABRIR/FECHAR O DROPDOWN -->
 
 <script src="../../assets/js/main.js"></script>
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-    const btn = document.getElementById('btnNotificacao');
-    const dropdown = document.getElementById('dropdownNotificacoes');
-
-    if (btn && dropdown) {
-        btn.addEventListener('click', function (e) {
-            e.stopPropagation(); // Evita que o clique feche imediatamente
-            dropdown.classList.toggle('show');
-        });
-
-        // Clica fora do menu para fechar
-        document.addEventListener('click', function (e) {
-            if (!dropdown.contains(e.target) && e.target !== btn) {
-                dropdown.classList.remove('show');
-            }
-        });
-    }
-});
-</script>
