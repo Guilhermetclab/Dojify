@@ -72,7 +72,7 @@ class LoginController {
                     header('Location: ../view/professor/home_professor.php');
                     break;
                 case 4: // Aluno
-                    header('Location: ../view/usuarios/home_usuario.php');
+                    header('Location: ../view/usuarios/home_aluno.php');
                     break;
                 default:
                     // Perfil desconhecido, logout por segurança
