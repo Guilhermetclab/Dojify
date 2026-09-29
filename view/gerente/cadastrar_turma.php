@@ -1,4 +1,3 @@
-```php
 <?php
 // view/turma/cadastrar_turma.php
 
@@ -15,7 +14,7 @@ if (
 
 require_once __DIR__ . '/../../model/dao/TurmaDAO.php';
 
-$dao = new TurmaDAO();
+$dao = new \TurmaDAO();
 
 $idAcademia = (int) $_SESSION['id_academia'];
 
@@ -37,7 +36,7 @@ $modalidades = $dao->listarModalidadesPorAcademia($idAcademia);
 
 <body>
 
-    <?php include '../includes/sidebar.php'; ?>
+    <?php include '../includes/header.php'; ?>
 
     <main class="conteudo">
         <form action="../../controller/TurmaController.php" method="POST">
