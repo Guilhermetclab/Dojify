@@ -12,16 +12,25 @@ if (!isset($_SESSION['usuario']) || (int)$_SESSION['usuario']['perfil_id'] !== 4
 
 require_once __DIR__ . '/../../model/dao/conexao.php';
 
-$id_aluno = $_SESSION['usuario']['id_usuario'];
+$calendarioSemanal = [];
+$meus_agendamentos = [];
 $mensagem_erro = "";
 $mensagem_sucesso = "";
 $is_primeiro_acesso = false;
+$id_aluno = $_SESSION['usuario']['id_usuario'];
+
+// Variáveis padrão para o contrato
+$c_nome = $c_cpf = $c_data_nasc = $c_sexo = $c_responsavel = $c_cpf_resp = $c_email = $c_tel = $c_endereco = $c_cidade = $c_estado = "---";
+$c_luta = "Artes Marciais / Ver agenda"; 
+$c_plano = "Não especificado";
+$c_infoMedica = $c_especial = $c_obs = "---";
 
 try {
     $pdo_agenda = \Conexao::getConexao();
 
-    // 1. VERIFICAR SE É O PRIMEIRO ACESSO DO ALUNO
-    // (Garante que a coluna primeiro_acesso existe. Se der erro, assumimos que não é primeiro acesso para não bloquear o sistema)
+    // ==============================================================================
+    // 1. VERIFICAR PRIMEIRO ACESSO E BUSCAR DADOS PARA O CONTRATO
+    // ==============================================================================
     try {
         $stmt_check = $pdo_agenda->prepare("SELECT primeiro_acesso FROM usuario WHERE id_usuario = ?");
         $stmt_check->execute([$id_aluno]);
@@ -29,16 +38,47 @@ try {
         
         if ($user_data && (int)$user_data['primeiro_acesso'] === 1) {
             $is_primeiro_acesso = true;
+            
+            // Buscar dados baseados no seu SQL exato
+            $stmt_aluno = $pdo_agenda->prepare("
+                SELECT u.nome, u.email, u.cpf, u.data_nascimento, u.telefone, 
+                       u.responsavel, u.observacao, p.nome_plano
+                FROM usuario u
+                LEFT JOIN plano p ON u.id_usuario = p.id_usuario_aluno AND p.status = 'ATIVO'
+                WHERE u.id_usuario = ?
+                LIMIT 1
+            ");
+            $stmt_aluno->execute([$id_aluno]);
+            $dados_contrato = $stmt_aluno->fetch(PDO::FETCH_ASSOC);
+
+            if ($dados_contrato) {
+                $c_nome = $dados_contrato['nome'] ?: "Não informado";
+                $c_email = $dados_contrato['email'] ?: "Não informado";
+                
+                // Formatar CPF
+                $cpf_limpo = $dados_contrato['cpf'];
+                $c_cpf = (strlen($cpf_limpo) == 11) ? preg_replace("/(\d{3})(\d{3})(\d{3})(\d{2})/", "\$1.\$2.\$3-\$4", $cpf_limpo) : "Não informado";
+                
+                $c_data_nasc = $dados_contrato['data_nascimento'] ? date('d/m/Y', strtotime($dados_contrato['data_nascimento'])) : "Não informado";
+                $c_tel = $dados_contrato['telefone'] ?: "Não informado";
+                $c_responsavel = $dados_contrato['responsavel'] ?: "O próprio";
+                $c_obs = $dados_contrato['observacao'] ?: "Nenhuma observação registrada";
+                $c_plano = $dados_contrato['nome_plano'] ?: "Plano Base";
+                $c_infoMedica = "Vide observações gerais: " . $c_obs;
+                $c_especial = "Não";
+            }
         }
     } catch (Exception $e) {
-        $is_primeiro_acesso = false; // Se a coluna não existir, passa direto
+        $is_primeiro_acesso = false;
     }
 
+    // ==============================================================================
     // 2. PROCESSAR O FORMULÁRIO DE PRIMEIRO ACESSO (CONTRATO E SENHA)
+    // ==============================================================================
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['acao_aceite_contrato'])) {
         $senha_nova = $_POST['senha_nova'] ?? '';
         $senha_confirma = $_POST['senha_confirma'] ?? '';
-        $aceite = isset($_POST['aceite_contrato']) ? true : false;
+        $aceite = isset($_POST['ciente2']) ? true : false;
 
         if (!$aceite) {
             $mensagem_erro = "Precisa de ler e aceitar o contrato da academia para continuar.";
@@ -47,26 +87,29 @@ try {
         } elseif ($senha_nova !== $senha_confirma) {
             $mensagem_erro = "As senhas não coincidem. Tente novamente.";
         } else {
-            // Tudo certo! Criptografar nova senha e remover o status de primeiro acesso
+            // Criptografa a nova senha
             $senha_hash = password_hash($senha_nova, PASSWORD_DEFAULT);
             
-            $stmt_update = $pdo_agenda->prepare("UPDATE usuario SET senha = ?, primeiro_acesso = 0 WHERE id_usuario = ?");
-            if ($stmt_update->execute([$senha_hash, $id_aluno])) {
-                // Sucesso! Atualiza a página para carregar o painel normal
+            // No seu SQL, a senha fica na tabela 'login' e o primeiro acesso na 'usuario'
+            $stmt_senha = $pdo_agenda->prepare("UPDATE login SET senha_hash = ? WHERE id_usuario = ?");
+            $stmt_acesso = $pdo_agenda->prepare("UPDATE usuario SET primeiro_acesso = 0 WHERE id_usuario = ?");
+            
+            if ($stmt_senha->execute([$senha_hash, $id_aluno]) && $stmt_acesso->execute([$id_aluno])) {
+                // Redireciona para atualizar a sessão
                 header("Location: home_aluno.php");
                 exit;
             } else {
-                $mensagem_erro = "Erro ao guardar as alterações. Tente novamente.";
+                $mensagem_erro = "Erro ao guardar as alterações.";
             }
         }
     }
 
     // ==============================================================================
-    // SE NÃO FOR PRIMEIRO ACESSO, CARREGA OS DADOS NORMAIS DO PAINEL DE AGENDAMENTO
+    // 3. SE NÃO FOR PRIMEIRO ACESSO, CARREGA O PAINEL NORMAL
     // ==============================================================================
     if (!$is_primeiro_acesso) {
         
-        // Processar cancelamento
+        // Cancelamento
         if (isset($_GET['cancelar'])) {
             $id_agendamento = $_GET['cancelar'];
             $stmtCancel = $pdo_agenda->prepare("UPDATE agendamento SET status = 'CANCELADO' WHERE id_agendamento = ? AND id_usuario_aluno = ?");
@@ -75,7 +118,7 @@ try {
             }
         }
 
-        // Processar agendamento rápido
+        // Agendamento Rápido
         if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['acao_agendar_semana'])) {
             $id_turma = $_POST['id_turma'] ?? null;
             $data_escolhida = $_POST['data_escolhida'] ?? null; 
@@ -83,8 +126,8 @@ try {
 
             if (!empty($id_turma) && !empty($data_escolhida)) {
                 $data_formatada = $data_escolhida . ' ' . $hora_aula;
-                $data_obj = new DateTime($data_formatada);
-
+                
+                // Validação de Capacidade (20 alunos)
                 $stmtCap = $pdo_agenda->prepare("SELECT capacidade FROM turma WHERE id_turma = ?");
                 $stmtCap->execute([$id_turma]);
                 $turmaInfo = $stmtCap->fetch(PDO::FETCH_ASSOC);
@@ -97,45 +140,26 @@ try {
                 if ($vagasOcupadas >= $capacidadeMax) {
                     $mensagem_erro = "Turma lotada! Limite de {$capacidadeMax} alunos atingido.";
                 } else {
-                    try {
-                        $stmtPlano = $pdo_agenda->prepare("SELECT p.limite_semanal FROM matricula m JOIN plano p ON m.id_plano = p.id_plano WHERE m.id_usuario_aluno = ? AND m.status = 'ATIVO' LIMIT 1");
-                        $stmtPlano->execute([$id_aluno]);
-                        $dadosPlano = $stmtPlano->fetch(PDO::FETCH_ASSOC);
-
-                        if ($dadosPlano && isset($dadosPlano['limite_semanal']) && !is_null($dadosPlano['limite_semanal'])) {
-                            $limiteSemanal = (int)$dadosPlano['limite_semanal'];
-                            $inicioSemana = clone $data_obj; $inicioSemana->modify('monday this week')->setTime(0, 0, 0);
-                            $fimSemana = clone $data_obj; $fimSemana->modify('sunday this week')->setTime(23, 59, 59);
-
-                            $stmtCountSemana = $pdo_agenda->prepare("SELECT COUNT(*) as total_semana FROM agendamento WHERE id_usuario_aluno = ? AND status = 'CONFIRMADO' AND data_agendamento BETWEEN ? AND ?");
-                            $stmtCountSemana->execute([$id_aluno, $inicioSemana->format('Y-m-d H:i:s'), $fimSemana->format('Y-m-d H:i:s')]);
-                            $totalSemana = (int)$stmtCountSemana->fetch()['total_semana'];
-
-                            if ($totalSemana >= $limiteSemanal) {
-                                $mensagem_erro = "Limite semanal atingido! O seu plano permite apenas {$limiteSemanal} treino(s) por semana.";
-                            }
-                        }
-                    } catch (Exception $exPlano) {}
-
-                    if (empty($mensagem_erro)) {
-                        $stmtIns = $pdo_agenda->prepare("INSERT INTO agendamento (id_turma, id_usuario_aluno, data_agendamento, status) VALUES (?, ?, ?, 'CONFIRMADO')");
-                        if ($stmtIns->execute([$id_turma, $id_aluno, $data_formatada])) {
-                            $mensagem_sucesso = "Treino agendado com sucesso no tatame! 🥋";
-                        } else {
-                            $mensagem_erro = "Erro ao registar o agendamento.";
-                        }
+                    $stmtIns = $pdo_agenda->prepare("INSERT INTO agendamento (id_turma, id_usuario_aluno, data_agendamento, status) VALUES (?, ?, ?, 'CONFIRMADO')");
+                    if ($stmtIns->execute([$id_turma, $id_aluno, $data_formatada])) {
+                        $mensagem_sucesso = "Treino agendado com sucesso no tatame! 🥋";
+                    } else {
+                        $mensagem_erro = "Erro ao registar o agendamento.";
                     }
                 }
             }
         }
 
-        // Buscar turmas
-        $stmt_t = $pdo_agenda->query("SELECT t.id_turma, t.nome as nome_turma, t.capacidade, h.dia_semana, h.hora_inicio FROM turma t LEFT JOIN horario_turma h ON t.id_turma = h.id_turma WHERE t.status = 'ATIVA'");
+        // Buscar turmas (Garante compatibilidade com seu LEFT JOIN em horario_turma)
+        $stmt_t = $pdo_agenda->query("SELECT t.id_turma, t.nome as nome_turma, t.capacidade, 
+                                             h.dia_semana, h.hora_inicio 
+                                      FROM turma t 
+                                      LEFT JOIN horario_turma h ON t.id_turma = h.id_turma 
+                                      WHERE t.status = 'ATIVA'");
         $turmas_brutas = $stmt_t->fetchAll(PDO::FETCH_ASSOC);
 
-        $calendarioSemanal = [];
+        // Montar calendário
         $hoje = new DateTime();
-        
         for ($i = 1; $i <= 7; $i++) {
             $diaLoop = clone $hoje;
             $diaLoop->modify('monday this week');
@@ -159,8 +183,12 @@ try {
             }
         }
 
-        // Buscar agendamentos
-        $stmt_meus = $pdo_agenda->prepare("SELECT a.id_agendamento, a.data_agendamento, t.nome as nome_turma FROM agendamento a JOIN turma t ON a.id_turma = t.id_turma WHERE a.id_usuario_aluno = ? AND a.status = 'CONFIRMADO' ORDER BY a.data_agendamento ASC");
+        // Buscar agendamentos do aluno
+        $stmt_meus = $pdo_agenda->prepare("SELECT a.id_agendamento, a.data_agendamento, t.nome as nome_turma 
+                                           FROM agendamento a
+                                           JOIN turma t ON a.id_turma = t.id_turma
+                                           WHERE a.id_usuario_aluno = ? AND a.status = 'CONFIRMADO'
+                                           ORDER BY a.data_agendamento ASC");
         $stmt_meus->execute([$id_aluno]);
         $meus_agendamentos = $stmt_meus->fetchAll(PDO::FETCH_ASSOC);
     }
@@ -176,13 +204,17 @@ try {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Painel do Aluno - Dojify</title>
+    <!-- Bootstrap 5.3.3 CDN -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="../../assets/css/estilo.css">
 </head>
 
 <body style="background-color: var(--bg-body, #f8f9fa);">
 
-    <?php include '../includes/header.php'; ?>
+    <!-- Header escondido na hora de imprimir (d-print-none) -->
+    <div class="d-print-none">
+        <?php include '../includes/header.php'; ?>
+    </div>
 
     <main class="container py-4">
         
@@ -190,46 +222,142 @@ try {
             <!-- ========================================================= -->
             <!-- TELA DE PRIMEIRO ACESSO (CONTRATO + NOVA SENHA) -->
             <!-- ========================================================= -->
-            <div class="row justify-content-center">
-                <div class="col-md-8 col-lg-6">
+            <div class="row justify-content-center d-print-block">
+                <div class="col-lg-10">
+                    <!-- O border-0 e shadow-none na hora de imprimir ajudam o layout de papel -->
                     <div class="card shadow border-0 rounded-3">
-                        <div class="card-header bg-danger text-white text-center py-3">
-                            <h4 class="mb-0 fw-bold">🥋 Bem-vindo à Dojify!</h4>
+                        <div class="card-header bg-danger text-white text-center py-3 d-print-none">
+                            <h4 class="mb-0 fw-bold">🥋 Bem-vindo à Dojify! Acesso Inicial</h4>
                         </div>
                         <div class="card-body p-4">
-                            <p class="text-center text-muted mb-4">Para liberar o seu painel e começar a agendar treinos, precisamos que defina a sua nova senha de acesso e aceite os termos da academia.</p>
+                            <p class="text-center text-muted mb-4 d-print-none">Para libertar o seu painel de agendamentos, confirme os seus dados no contrato abaixo, assinale a caixa de aceite e defina a sua nova senha pessoal.</p>
 
                             <?php if (!empty($mensagem_erro)): ?>
-                                <div class="alert alert-danger py-2 text-center fw-bold"><?= $mensagem_erro; ?></div>
+                                <div class="alert alert-danger py-2 text-center fw-bold d-print-none"><?= $mensagem_erro; ?></div>
                             <?php endif; ?>
 
-                            <form method="POST" action="">
+                            <!-- ================= ÁREA DO CONTRATO ================= -->
+                            <!-- CSS embutido no style para evitar a tag <style>. No print, o script remove o scroll -->
+                            <div id="area-impressao" class="p-4 mb-4" style="border: 1px solid #dee2e6; border-radius: 0.375rem; background-color: #ffffff; max-height: 450px; overflow-y: auto; color: #333; font-size: 0.9rem; line-height: 1.6;">
+                                
+                                <div class="text-center mb-4">
+                                    <h2 class="fw-bold" style="color: #b30000; font-size: 1.5rem; border-bottom: 2px solid #eee; padding-bottom: 10px;">Contrato de Prestação de Serviços de Aulas de Artes Marciais</h2>
+                                </div>
+                                
+                                <h3 class="fw-bold mt-4 mb-2" style="color: #b30000; font-size: 1.1rem; border-bottom: 1px solid #eee;">Dados Aluno / Contratante</h3>
+                                <div class="row mb-2" style="border-bottom: 1px dashed #eee; padding-bottom: 5px;">
+                                    <div class="col-6"><strong>Nome do aluno(a):</strong> <?= htmlspecialchars($c_nome) ?></div>
+                                    <div class="col-6"><strong>CPF:</strong> <?= htmlspecialchars($c_cpf) ?></div>
+                                </div>
+                                <div class="row mb-2" style="border-bottom: 1px dashed #eee; padding-bottom: 5px;">
+                                    <div class="col-6"><strong>Data de nascimento:</strong> <?= htmlspecialchars($c_data_nasc) ?></div>
+                                    <div class="col-6"><strong>Sexo:</strong> <?= htmlspecialchars($c_sexo) ?></div>
+                                </div>
+                                <div class="row mb-2" style="border-bottom: 1px dashed #eee; padding-bottom: 5px;">
+                                    <div class="col-6"><strong>Nome do Responsável:</strong> <?= htmlspecialchars($c_responsavel) ?></div>
+                                    <div class="col-6"><strong>CPF do Responsável:</strong> <?= htmlspecialchars($c_cpf_resp) ?></div>
+                                </div>
+                                <div class="row mb-2" style="border-bottom: 1px dashed #eee; padding-bottom: 5px;">
+                                    <div class="col-6"><strong>E-mail:</strong> <?= htmlspecialchars($c_email) ?></div>
+                                    <div class="col-6"><strong>Telefone:</strong> <?= htmlspecialchars($c_tel) ?></div>
+                                </div>
+                                <div class="row mb-2" style="border-bottom: 1px dashed #eee; padding-bottom: 5px;">
+                                    <div class="col-6"><strong>Endereço:</strong> <?= htmlspecialchars($c_endereco) ?></div>
+                                    <div class="col-6"><strong>Cidade:</strong> <?= htmlspecialchars($c_cidade) ?> / <?= htmlspecialchars($c_estado) ?></div>
+                                </div>
+
+                                <h3 class="fw-bold mt-4 mb-2" style="color: #b30000; font-size: 1.1rem; border-bottom: 1px solid #eee;">Modalidade e Plano</h3>
+                                <p class="mb-1"><strong>Modalidade:</strong> <?= htmlspecialchars($c_luta) ?></p>
+                                <p><strong>Frequência e Plano:</strong> <?= htmlspecialchars($c_plano) ?></p>
+
+                                <h3 class="fw-bold mt-4 mb-2" style="color: #b30000; font-size: 1.1rem; border-bottom: 1px solid #eee;">Informações Adicionais</h3>
+                                <p class="mb-1"><strong>Informações médicas a serem consideradas?</strong> <?= htmlspecialchars($c_infoMedica) ?></p>
+                                <p class="mb-1"><strong>O aluno necessita de alguma adaptação especial?</strong> <?= htmlspecialchars($c_especial) ?></p>
+                                <p><strong>Observações gerais:</strong> <?= htmlspecialchars($c_obs) ?></p>
+
+                                <h3 class="fw-bold mt-4 mb-2" style="color: #b30000; font-size: 1.1rem; border-bottom: 1px solid #eee;">Dados do Contratado</h3>
+                                <p class="mb-1"><strong>Contratado:</strong> A TOKKA – Escola de Lutas</p>
+                                <p class="mb-1"><strong>CNPJ:</strong> 66.790.246/0001-12</p>
+                                <p class="mb-1"><strong>Endereço:</strong> QNM 08 Conjunto B Lote 34</p>
+                                <p class="mb-1"><strong>Telefone:</strong> (61) 99869-3504</p>
+                                <p><strong>Instrutor responsável:</strong> Klevisson Araújo</p>
+
+                                <h3 class="fw-bold mt-4 mb-2" style="color: #b30000; font-size: 1.1rem; border-bottom: 1px solid #eee;">Termos e Cláusulas</h3>
+                                <p>As partes acima identificadas têm, entre si, justo e acertado o presente contrato de prestação de serviços de aulas de artes marciais, que se regerá pelas cláusulas e condições a seguir:</p>
+                                
+                                <p><strong>CLÁUSULA 1 — DO OBJETO</strong><br>
+                                1.1 O presente contrato tem como objeto a prestação de serviços de aulas de artes marciais na modalidade contratada, observada a frequência escolhida pelo(a) CONTRATANTE, em dias e horários previamente disponibilizados pelo CONTRATADO.</p>
+                                
+                                <p><strong>CLÁUSULA 2 — DO VALOR E FORMA DE PAGAMENTO</strong><br>
+                                2.1 O CONTRATANTE pagará ao CONTRATADO o valor correspondente ao plano selecionado, conforme indicado neste instrumento, a serem pagos até o dia 10 (dez) de cada mês, via dinheiro, pix ou transferência bancária.<br>
+                                2.2 O inadimplemento poderá acarretar a suspensão da participação do CONTRATANTE nas aulas até a regularização dos valores pendentes.</p>
+                                
+                                <p><strong>CLÁUSULA 3 — DAS RESPONSABILIDADES</strong><br>
+                                3.1 O CONTRATADO compromete-se a ministrar as aulas de acordo com as técnicas próprias da modalidade, observando as normas de segurança e zelando pelo adequado estado de conservação dos equipamentos e instalações.<br>
+                                3.2 O CONTRATANTE compromete-se a respeitar as normas internas, regras de vestimenta, higiene, segurança e conduta estabelecidas pela academia.<br>
+                                3.3 O CONTRATANTE declara estar apto à prática de atividades físicas e ciente de que a prática de artes marciais envolve esforço físico e riscos inerentes, responsabilizando-se pelas informações de saúde prestadas.<br>
+                                3.4 O CONTRATANTE assume responsabilidade por eventuais problemas de saúde ou lesões decorrentes da prática das atividades, isentando o CONTRATADO de responsabilidade nos casos de imprudência, descumprimento das orientações recebidas ou existência de condições médicas não informadas previamente.<br>
+                                3.5 Caso o CONTRATANTE seja o responsável legal por menor de idade, declara, para todos os fins de direito, que assume, em nome do menor, integral responsabilidade pelos riscos decorrentes da prática das atividades contratadas, estendendo-se a isenção de responsabilidade aqui prevista ao menor sob sua guarda.</p>
+                                
+                                <p><strong>CLÁUSULA 4 — DAS FALTAS E REPOSIÇÕES</strong><br>
+                                4.1 O não comparecimento do CONTRATANTE às aulas não gera direito à reposição, desconto, compensação ou reembolso de valores.</p>
+                                
+                                <p><strong>CLÁUSULA 5 — DA DURAÇÃO DO CONTRATO</strong><br>
+                                5.1 O presente contrato terá duração mínima de 3 (três) meses, contados a partir da data de sua assinatura.</p>
+                                
+                                <p><strong>CLÁUSULA 6 — DA RESCISÃO</strong><br>
+                                O presente contrato poderá ser rescindido:<br>
+                                6.1 Por qualquer das partes, mediante aviso prévio de 30 (trinta) dias.<br>
+                                6.2 Em caso de inadimplemento ou descumprimento de cláusulas contratuais.<br>
+                                6.3 O CONTRATADO poderá rescindir imediatamente o presente contrato em caso de conduta agressiva, desrespeito às normas internas, comportamento inadequado ou atitudes que coloquem em risco os demais alunos, professores ou colaboradores.<br>
+                                6.4 O CONTRATADO não está obrigado à devolução dos valores pagos.</p>
+                                
+                                <p><strong>CLÁUSULA 7 — DO USO DE IMAGEM</strong><br>
+                                7.1 O CONTRATANTE ou o RESPONSÁVEL LEGAL (no caso de aluno menor de 18 anos) autoriza, de forma gratuita e por prazo indeterminado, o uso de sua imagem e/ou do menor, capturados em fotos e vídeos durante as atividades da TOKKA – Escola de Lutas.<br>
+                                7.2 A autorização é concedida para fins de divulgação e publicidade da academia, em todos os meios de comunicação, digitais ou impressos, incluindo redes sociais, sem que disso resulte qualquer obrigação de indenização ou compensação financeira.</p>
+
+                                <p><strong>CLÁUSULA 8 — DAS DISPOSIÇÕES FINAIS</strong><br>
+                                8.1 Este contrato é firmado em duas vias de igual teor e forma, assinadas pelas partes para que produza seus efeitos legais.</p>
+
+                                <br>
+                                <p class="text-center"><strong>Brasília - DF, <?= date("d/m/Y"); ?>.</strong></p>
+                                <br><br>
+                                <div class="d-flex justify-content-between text-center mt-4">
+                                    <div style="width: 45%;">
+                                        <hr style="border: 1px solid #000;">
+                                        ASSINATURA CONTRATANTE
+                                    </div>
+                                    <div style="width: 45%;">
+                                        <hr style="border: 1px solid #000;">
+                                        ASSINATURA CONTRATADO
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- ================= FIM DA ÁREA DO CONTRATO ================= -->
+
+                            <!-- O form tem d-print-none para ocultar botões ao imprimir. O onsubmit tira o max-height antes de imprimir! -->
+                            <form method="POST" action="" class="d-print-none" onsubmit="document.getElementById('area-impressao').style.maxHeight='none'; document.getElementById('area-impressao').style.overflow='visible'; window.print(); return true;">
                                 <input type="hidden" name="acao_aceite_contrato" value="1">
                                 
-                                <div class="mb-3">
-                                    <label class="form-label fw-bold small">Definir Nova Senha</label>
-                                    <input type="password" name="senha_nova" class="form-control bg-light" required placeholder="Mínimo 6 caracteres">
-                                </div>
-                                <div class="mb-4">
-                                    <label class="form-label fw-bold small">Confirmar Nova Senha</label>
-                                    <input type="password" name="senha_confirma" class="form-control bg-light" required placeholder="Repita a senha">
-                                </div>
-
-                                <div class="border rounded p-3 mb-3 bg-light" style="max-height: 150px; overflow-y: auto; font-size: 0.85rem;">
-                                    <strong class="d-block mb-2">Termo de Responsabilidade e Matrícula</strong>
-                                    Declaro para os devidos fins que estou em plenas condições de saúde física e mental para a prática de artes marciais. Concordo em respeitar as regras do Dojô, os mestres e os meus colegas de treino. Estou ciente das políticas de mensalidade e cancelamento da academia.
-                                    <br><br>
-                                    <em>* Este é um contrato padrão. Ao assinalar a caixa abaixo, concorda digitalmente com os termos impostos pela academia.</em>
-                                </div>
-
-                                <div class="form-check mb-4">
-                                    <input class="form-check-input border-secondary" type="checkbox" name="aceite_contrato" id="aceite_contrato" required>
-                                    <label class="form-check-label small fw-bold text-dark" for="aceite_contrato">
-                                        Li e aceito os termos do contrato da academia.
+                                <div class="form-check mb-4 bg-light p-3 border rounded">
+                                    <input class="form-check-input ms-1 me-2 border-danger" type="checkbox" name="ciente2" id="ciente2" required>
+                                    <label class="form-check-label fw-bold text-dark" for="ciente2" style="font-size: 0.95rem;">
+                                        Declaro que li, compreendi e aceito integralmente todos os termos e condições do contrato acima.
                                     </label>
                                 </div>
 
-                                <button type="submit" class="btn btn-danger w-100 fw-bold py-2">Confirmar e Entrar no Painel</button>
+                                <div class="row g-3 mb-4">
+                                    <div class="col-md-6">
+                                        <label class="form-label fw-bold small text-danger">Definir Nova Senha Definitiva</label>
+                                        <input type="password" name="senha_nova" class="form-control border-danger" required placeholder="Mínimo 6 caracteres">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label fw-bold small text-danger">Confirmar Senha</label>
+                                        <input type="password" name="senha_confirma" class="form-control border-danger" required placeholder="Repita a senha">
+                                    </div>
+                                </div>
+
+                                <button type="submit" class="btn btn-danger w-100 fw-bold py-3 fs-5 shadow-sm">Assinar Contrato e Entrar no Painel</button>
                             </form>
                         </div>
                     </div>
@@ -238,12 +366,12 @@ try {
 
         <?php else: ?>
             <!-- ========================================================= -->
-            <!-- PAINEL NORMAL (CARTÕES E CALENDÁRIO) -->
+            <!-- PAINEL NORMAL DE AGENDAMENTOS (CALENDÁRIO HORIZONTAL LADO A LADO) -->
             <!-- ========================================================= -->
+            
             <h2 class="text-center mb-2">Painel do Aluno</h2>
             <p class="text-muted text-center mb-4">Bem-vindo(a), <?= htmlspecialchars($_SESSION['usuario']['nome']) ?>! Acompanhe a sua evolução e treinos.</p>
 
-            <!-- Alertas -->
             <?php if (!empty($mensagem_sucesso)): ?>
                 <div class="alert alert-success text-center py-2"><?= $mensagem_sucesso; ?></div>
             <?php endif; ?>
@@ -251,7 +379,6 @@ try {
                 <div class="alert alert-danger text-center py-2"><?= $mensagem_erro; ?></div>
             <?php endif; ?>
 
-            <!-- Cartões Originais -->
             <div class="row g-3 justify-content-center mb-4">
                 <div class="col-md-4">
                     <div class="card h-100 shadow-sm border p-2 text-center">
@@ -273,11 +400,12 @@ try {
                 </div>
             </div>
 
-            <!-- CALENDÁRIO SEMANAL COMPACTO -->
+            <!-- CALENDÁRIO SEMANAL COMPACTO (Lado a Lado) -->
             <div class="card shadow-sm border p-3 mb-4">
                 <h5 class="text-uppercase fw-bold text-danger mb-1" style="font-size: 1rem;">📅 Agenda Semanal de Treinos</h5>
                 <p class="text-muted small mb-3">Escolha a sua turma e clique em agendar no dia respetivo.</p>
 
+                <!-- Scroll nativo do Bootstrap sem CSS injetado -->
                 <div class="d-flex overflow-auto pb-2" style="gap: 10px;">
                     <?php foreach ($calendarioSemanal as $dia): ?>
                         <div class="shadow-sm border border-secondary text-white rounded" style="flex: 0 0 135px; background-color: #1a1a1a;">
@@ -294,11 +422,13 @@ try {
                                             <span class="text-warning d-block fw-bold" style="font-size: 0.75rem;"><?= htmlspecialchars($aula['nome_turma']); ?></span>
                                             <span class="text-white d-block mb-2" style="font-size: 0.7rem;">⏰ <?= date('H:i', strtotime($aula['hora_inicio'])); ?></span>
                                             
+                                            <!-- Form anulando os estilos usando classes nativas do Bootstrap -->
                                             <form method="POST" action="" class="d-block m-0 p-0 bg-transparent border-0 shadow-none">
                                                 <input type="hidden" name="acao_agendar_semana" value="1">
                                                 <input type="hidden" name="id_turma" value="<?= $aula['id_turma']; ?>">
                                                 <input type="hidden" name="data_escolhida" value="<?= $dia['data_iso']; ?>">
                                                 <input type="hidden" name="hora_aula" value="<?= $aula['hora_inicio']; ?>">
+                                                
                                                 <button type="submit" class="btn btn-danger btn-sm w-100 fw-bold border-0" style="font-size: 0.75rem; padding: 4px 0;">Agendar</button>
                                             </form>
                                         </div>
@@ -333,7 +463,7 @@ try {
                                         <td><?= date('d/m/Y H:i', strtotime($ag['data_agendamento'])); ?></td>
                                         <td><span class="badge bg-success">Confirmado</span></td>
                                         <td class="text-end">
-                                            <a href="home_aluno.php?cancelar=<?= $ag['id_agendamento']; ?>" class="btn btn-outline-danger btn-sm py-0 px-2" style="font-size: 0.75rem;" onclick="return confirm('Deseja cancelar?')">Cancelar</a>
+                                            <a href="home_aluno.php?cancelar=<?= $ag['id_agendamento']; ?>" class="btn btn-outline-danger btn-sm py-0 px-2" style="font-size: 0.75rem;" onclick="return confirm('Deseja cancelar este agendamento?')">Cancelar</a>
                                         </td>
                                     </tr>
                                 <?php endforeach; ?>
@@ -347,7 +477,10 @@ try {
 
     </main>
 
-    <?php include '../includes/footer.php'; ?>
+    <!-- Footer escondido na hora de imprimir -->
+    <div class="d-print-none">
+        <?php include '../includes/footer.php'; ?>
+    </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="../../assets/js/main.js"></script>
