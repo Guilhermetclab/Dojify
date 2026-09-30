@@ -407,5 +407,5 @@ INSERT INTO presenca(id_presenca, id_agendamento, data, status) VALUES
 INSERT INTO graduacao(id_graduacao, id_usuario_aluno, id_usuario_professor, id_modalidade, data_graduacao, faixa, grau) VALUES 
 (1, 3, 2, 1, '2026-01-15', 'Branca', '2º Grau');
 
-
+ALTER TABLE usuario ADD primeiro_acesso TINYINT(1) DEFAULT 1;
 
